@@ -8,6 +8,7 @@ import subprocess
 import sys
 import token
 import tokenize
+import collections
 
 EXIT_COMMAND_NOT_FOUND = 127
 EXIT_SSHFS_HOST_MISMATCH = 1
@@ -56,20 +57,20 @@ def listtoshc(arglist):
 def sshfsdevicemap():
     """
     Return a dictionary mapping device ID's to tuples containing the mount
-    point, host and path for all remote hosts mounted with sshfs.
+    point, remote ([user@]hostname) and path for all remote hosts mounted
+    with sshfs.
     """
     mapping = dict()
-    with open("/proc/mounts") as iostream:
+    with open("/proc/self/mountinfo") as iostream:
         for line in iostream:
-            remote, mountpoint, fstype, mountopts, freq, passno = line.split(' ')
+            fields = line.split(' ', 11)
+            fstype = fields[7]
+
             if fstype == 'fuse.sshfs':
-                host, path = remote.split(':', 1)
-                try:
-                    device = os.stat(mountpoint).st_dev
-                    mapping[device] = (mountpoint, host, path)
-                except EnvironmentError as e:
-                    if e.errno != errno.ENOTCONN:
-                        raise
+                mountpoint = fields[4]
+                remote, path = fields[8].split(':', 1)
+                device = os.makedev(*(map(int, fields[2].split(':'))))
+                mapping[device] = (mountpoint, remote, path)
 
     return mapping
 
