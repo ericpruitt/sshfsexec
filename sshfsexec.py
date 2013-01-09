@@ -54,68 +54,61 @@ def listtoshc(arglist):
     return ' '.join(map(pipes.quote, arglist))
 
 
-def sshfsdevicemap():
+def sshfsmountmap():
     """
-    Return a dictionary mapping device ID's to tuples containing the mount
-    point, remote ([user@]hostname) and path for all remote hosts mounted
-    with sshfs.
+    Return a dictionary mapping mount points to tuples containing the
+    remote login ([user@]hostname) and remote path for all remote hosts
+    mounted with sshfs.
     """
     mapping = dict()
     with open("/proc/self/mountinfo") as iostream:
         for line in iostream:
             fields = line.split(' ', 11)
             fstype = fields[7]
+            mountpoint = os.path.abspath(fields[4])
 
             if fstype == 'fuse.sshfs':
-                mountpoint = fields[4]
                 remote, path = fields[8].split(':', 1)
                 device = os.makedev(*(map(int, fields[2].split(':'))))
-                mapping[device] = (mountpoint, remote, path)
+                mapping[mountpoint] = (remote, os.path.abspath(path))
+
+            else:
+                mapping[mountpoint] = None
 
     return mapping
 
 
-def translatepath(localpath, devicemap, relative=False, searchup=True):
+def translatepath(localpath, devicemap):
     """
     Determine the remote SSH host and remote path of a file located within
-    an sshfs mount point. The devicemap must be a dictionary in the format
-    returned by sshfsdevicemap. When set, `relative` will yield a path
-    relative to the mount point's root. With the `searchup` option set, the
-    function will attempt to determine the device ID of `localpath` by
-    iteratively checking the parent directories in cases where `localpath`
-    does not yet exist. A tuple containing the remote host, remote path,
-    and remote path of the mount point is returned.
+    an sshfs mount point. The mountmap is a dictionary in the format
+    returned by sshfsmountmap. A tuple containing the remote login
+    ([user@]hostname), remote path, and remote path of the mount point is
+    returned `localpath` is within an SSHFS mount point, even if the file
+    does not exist, and `None` otherwise.
     """
-    statdir = localpath
+    testdir = os.path.abspath(localpath)
     while True:
-        try:
-            device = os.stat(statdir).st_dev
-            break
-        except EnvironmentError as e:
-            if e.errno != errno.ENOENT or not searchup:
-                raise
-            statdir, _ = os.path.split(statdir)
+        mountpoint = testdir
+        mountinfo = devicemap.get(mountpoint, None)
 
-        if not statdir or statdir == '/':
+        if mountinfo:
+            host, remoteroot = mountinfo
+            break
+        elif not testdir or testdir == '/':
             return None
 
-    try:
-        mountpoint, host, remoteroot = devicemap[device]
-    except KeyError:
-        return None
+        testdir, _ = os.path.split(testdir)
 
     localpath = os.path.join(os.getcwd(), localpath)
     relpath = os.path.relpath(localpath, mountpoint)
-    if relative:
-        remotepath = relpath
-    else:
-        remotepath = os.path.join(remoteroot, relpath)
+    remotepath = os.path.join(remoteroot, relpath)
 
     return host, remotepath, remoteroot
 
 
 def main(configcode=''):
-    sshfsmounts = sshfsdevicemap()
+    mountmap = sshfsmountmap()
     command, originalargs = os.path.basename(sys.argv[0]), sys.argv[1:]
     environment = dict(os.environ)
 
@@ -124,7 +117,7 @@ def main(configcode=''):
     commandprefix = ''
 
     # Figure out where the current working directory is on the remote system.
-    cwdtranslation = translatepath(os.getcwd(), sshfsmounts, searchup=False)
+    cwdtranslation = translatepath(os.getcwd(), mountmap)
     if cwdtranslation:
         sshremote, remotecwd, execremoteroot = cwdtranslation
         commandprefix = 'cd %s &&' % (pipes.quote(remotecwd))
@@ -160,7 +153,7 @@ def main(configcode=''):
          (any(map(argument.startswith, ('/', '../'))) or '/../' in argument)
           or (not cwdtranslation and argument.startswith('./'))):
             try:
-                translation = translatepath(argument, sshfsmounts)
+                translation = translatepath(argument, mountmap)
                 if translation:
                     mounthost, remotepath, remoteroot = translation
                     if not sshremote:
