@@ -206,9 +206,24 @@ def main(configcode=''):
         else:
             sshcommand = executed
 
-        # Allocate a pseudo-terminal if needed.
-        if sys.stdout.isatty():
-            argv = [SSH_BINARY, sshremote, '-t', sshcommand]
+        # Do some kludgey stuff to make isatty for the remote process match
+        # what the what sshfsexec sees.
+        ttys = [fd.isatty() for fd in (sys.stdin, sys.stdout, sys.stderr)]
+        if any(ttys):
+            if not all(ttys):
+                sshcommand = '(%s)' % sshcommand
+                if not ttys[0]:
+                    sshcommand = '/bin/cat | ' + sshcommand
+                    ttyoption = '-tt'
+                if not ttys[1]:
+                    sshcommand += ' | /bin/cat'
+                if not ttys[2]:
+                    sshcommand = 'exec 3>&1; (%s) 2>&1 >&3 3>&-' % sshcommand
+
+            else:
+                ttyoption = '-t'
+
+            argv = [SSH_BINARY, sshremote, ttyoption, sshcommand]
         else:
             argv = [SSH_BINARY, sshremote, sshcommand]
 
