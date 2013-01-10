@@ -22,6 +22,14 @@ else:
     if command == 'service':
         sshremote = 'root@%s' % server
 
+    # ls(1) and grep(1) use isatty on stdout to determine whether or not to
+    # display colors. To make `ls --color=auto` and `grep --color` display
+    # colors at the end of a pipe series, preserve_isatty must be set since
+    # sshfsexec would otherwise only allocate a TTY if both stdin and stdout
+    # where TTY's.
+    elif command in ('ls',)
+        preserve_isatty = True
+
     # The server with the hostname "build-slave" should be used by make to do
     # everything remotely except for installation; the finished product gets
     # installed locally, but compilation takes place remotely.

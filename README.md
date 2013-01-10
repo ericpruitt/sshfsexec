@@ -169,9 +169,22 @@ Remote SSH system where a command will be executed. This will be in the form of
 `user@hostname` or simply `hostname` depending on the arguments used for
 `sshfs` and the defined SSH options.
 
+### preserve_isatty ###
+
+Normally, a TTY will only be allocated on the remote server if, locally, stdin
+and stdout are TTY's. This causes problems with things like `grep --color` and
+`ls --color=auto`, both of which examine stdout to determine whether or not
+colors should be rendered. Setting `preserve_isatty` will result in some
+kludgey stuff being done to make sure the isatty results for stdin, stdout and
+stderr on the remote process are the same as for the local process.
+
+In its current implemenation, this option is buggy: anything launched on the
+remote server that reads from stdin will hang indefinitely waiting.
+
 To Do
 -----
 
 - Allow commands with both local and remote path arguments to be executed on
   both systems. For example `rm here.jpg ~/mounts/sshfs/there.jpg` would run
   `rm here.jpg` locally and `ssh user@remote 'rm there.jpg'`.
+- Fix hanging issue with `preserve_isatty`.
