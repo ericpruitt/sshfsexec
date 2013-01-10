@@ -125,12 +125,13 @@ def main(configcode=''):
         sshremote = ''
 
     translate_all_arguments = False
+    preserve_isatty = False
     transargs = list()
 
     # These variables are accessible inside the configuration script's context.
     configvars = ('command', 'originalargs', 'environment', 'commandprefix',
         'cwdtranslation', 'translate_all_arguments', 'sshremote', 'transargs',
-        'pre_process_config')
+        'pre_process_config', 'preserve_isatty')
 
     # First execution of configuration code prior to processing arguments. The
     # configu script is run in its namespace of sorts. Yes, I know this is a
@@ -196,21 +197,47 @@ def main(configcode=''):
 
     if sshremote:
         # If the command should be executed on a remote server, generate the
-        # execution string to pass into the shell. If the current working
-        # directory is inside an SSHFS mount, cd into the corresponding remote
-        # directory first.
+        # execution string to pass into the shell.
         executed = listtoshc([command] + transargs)
 
         if cwdtranslation:
-            sshcommand = 'cd %s && %s' % (remotecwd, executed)
+            # If the current working directory is inside an SSHFS mount, cd
+            # into the corresponding remote directory first. Why the brackets?
+            # When data is piped into cd without cd being in a command group,
+            # cd will not work:
+            #
+            #   ~% echo example | cd / && pwd
+            #   /home/jameseric
+            #   ~% echo example | { cd / && pwd; }
+            #   /
+            #
+            sshcommand = '{ cd %s && %s; }' % (remotecwd, executed)
         else:
             sshcommand = executed
 
-        # Allocate a pseudo-terminal if needed.
-        if sys.stdout.isatty():
-            argv = [SSH_BINARY, sshremote, '-t', sshcommand]
+        ttys = [fd.isatty() for fd in (sys.stdin, sys.stdout, sys.stderr)]
+        if any(ttys):
+            ttyoption = '-t'
+            if not preserve_isatty:
+                # Only create a tty if stdin and stdout are attached a tty.
+                ttyoption = '-t' if all(ttys[0:2]) else '-T'
+
+            elif not all(ttys):
+                # Do some kludgey stuff to make isatty for the remote process
+                # match the what sshfsexec sees.
+                if not ttys[0]:
+                    sshcommand = 'stty -echo; /bin/cat | ' + sshcommand
+                    ttyoption = '-tt'
+                if not ttys[1]:
+                    sshcommand += ' | /bin/cat'
+                if not ttys[2]:
+                    sshcommand = ('exec 3>&1; %s 2>&1 >&3 3>&- | /bin/cat >&2'
+                        % sshcommand)
+
         else:
-            argv = [SSH_BINARY, sshremote, sshcommand]
+            ttyoption = '-T'
+
+        argv = [SSH_BINARY, '-e', 'none', sshremote, ttyoption, sshcommand]
 
     else:
         # If the command does not interact with any SSHFS-mounted paths, run
