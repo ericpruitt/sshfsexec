@@ -27,20 +27,21 @@ accordingly.
     $ export PATH="$HOME/bin/sshfsexec:$PATH"
 
 If you adjust your `PATH` environment variable, make sure to update your login
-profile, generally `~/.profile`, to make sure `PATH` is setup automatically
+profile (generally `~/.profile`) to make sure `PATH` is setup automatically
 when you log in. Once sshfsexec has been copied into a folder in `PATH`, create
-a symlinks for the commands you wish to execute transparently on the remote
-systems. In the example below, I want `git` to be executed on remote systems
-for SSHFS volumes.
+symlinks from sshfsexec for the commands you wish to execute transparently on
+the remote systems. In the example below, `git` will be executed on remote
+systems when interacting with SSHFS volumes.
 
     $ cd ~/bin/sshfsexec
     $ ln -s sshfsexec.py git
+    $ hash -r                          # Clears the executable cache in Bash.
 
-Now that's done, any time I run `git` inside of the SSHFS volume, it will be
-executed on the remote system transparently:
+Any time `git` is inside of the SSHFS volume, it will not be executed on the
+remote system transparently:
 
-    ~$ sshfs codevat.com:/home/git/repositories git.codevt.com/
-    ~$ cd git.codevt.com/mydwm.git
+    ~$ sshfs codevat.com:/home/git/repositories git.codevat.com/
+    ~$ cd git.codevat.com/mydwm.git
     mydwm.git$ git log | head
     commit 8f80c5343a8b430b28d18a6902ed2fbb05a6c90a
     Author: Eric Pruitt
@@ -54,8 +55,8 @@ executed on the remote system transparently:
     commit bfd709906a5a5cc0f3788e342bbc47d7e6aa5a92
     mydwm.git$
 
-That is not a particularly convincing example, so let's run `git --version`
-inside the SSHFS volume and run the same command again in my home directory:
+That is not a particularly convincing example. Let us compare `git --version`
+executed inside the SSHFS volume and the home directory:
 
     mydwm.git$ git --version
     git version 1.7.1
@@ -68,7 +69,7 @@ If a command's arguments reference paths that are mounted inside an SSHFS
 folder, one's current working directory need not be inside the mount for
 transparent usage:
 
-    ~$ git clone ~/git.codevt.com/mydwm.git ~/git.codevt.com/clone.git
+    ~$ git clone ~/git.codevat.com/mydwm.git ~/git.codevat.com/clone.git
     Initialized empty Git repository in /home/git/repositories/clone.git/.git/
 
 By default, only absolute paths, relative paths that start with "./" or
@@ -77,8 +78,8 @@ following command would be executed locally across SSHFS instead of on the
 remote system using native file system access and likely take a long time to
 finish:
 
-    ~$ time git clone git.codevt.com/mydwm.git git.codevt.com/clone.git
-    Cloning into git.codevt.com/clone.git...
+    ~$ time git clone git.codevat.com/mydwm.git git.codevat.com/clone.git
+    Cloning into git.codevat.com/clone.git...
     done.
     real    2m37.094s
 
@@ -95,8 +96,8 @@ will be executed twice, once before the command arguments are translated and
 once after. On the first pass, `pre_process_config` is `True` and `False` on
 the second pass. During the first execution, `transargs` will not be populated,
 and `sshremote` will not yet be set if sshfsexec was run outside of an SSHFS
-mount. A sample configuration script can be found in this directory with the
-file name "config-sample.py". When the script is executed, the following
+mount. A sample configuration script can be found in this directory with the in
+the file named "config-sample.py". When the script is executed, the following
 variables are accessible and manipulatable inside the execution context:
 
 ### pre_process_config ###
@@ -138,8 +139,8 @@ within an SSHFS mount.
 ### cwdtranslation ###
 
 When a command is launched inside a directory within an SSHFS mount,
-cwdtranslation is a tuple that contains the remote connection ("user@hostname"
-or "hostname"), the remote directory that corresponds to the current working
+`cwdtranslation` is a tuple that contains the remote login ("user@hostname" or
+"hostname"), the remote directory that corresponds to the current working
 directory, and the remote directory that the SSHFS mount point corresponds to.
 If a command is launched outside of an SSHFS folder, this variable will be
 `None`.
