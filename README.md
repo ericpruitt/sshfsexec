@@ -147,6 +147,8 @@ variables are set locally before SSH is launched. This means that environment
 variables are subject to the configuration settings on the remote host,
 specifically `PermitUserEnvironment`.
 
+**stdin_is_pipe**: Boolean indicating whether or not stdin is a pipe.
+
 **originalargs**: Iterable containing the untranslated arguments passed to the
 command.
 

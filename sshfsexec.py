@@ -6,6 +6,7 @@ import os
 import pipes
 import subprocess
 import sys
+import stat
 
 EXIT_COMMAND_NOT_FOUND = 127
 EXIT_SSHFS_HOST_MISMATCH = 1
@@ -108,6 +109,7 @@ def main(configcode=''):
     mountmap = sshfsmountmap()
     command, originalargs = os.path.basename(sys.argv[0]), sys.argv[1:]
     environment = dict(os.environ)
+    stdin_is_pipe = stat.S_ISFIFO(os.fstat(0).st_mode)
 
     # Configuration defaults
     translate_all_arguments = False

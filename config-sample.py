@@ -22,6 +22,11 @@ else:
     if command == 'service':
         sshremote = 'root@%s' % server
 
+    # If stdin is a pipe, then force grep and sed to run locally since running
+    # them remotely with piped data would only slow things down.
+    elif command in ('grep', 'egrep', 'fgrep', 'sed') and stdin_is_pipe:
+        sshremote = None
+
     # ls(1) and grep(1) use isatty on stdout to determine whether or not to
     # display colors. To make `ls --color=auto` and `grep --color` display
     # colors at the end of a pipe series, preserve_isatty must be set since
