@@ -6,9 +6,6 @@ import os
 import pipes
 import subprocess
 import sys
-import token
-import tokenize
-import collections
 
 EXIT_COMMAND_NOT_FOUND = 127
 EXIT_SSHFS_HOST_MISMATCH = 1
@@ -112,38 +109,22 @@ def main(configcode=''):
     command, originalargs = os.path.basename(sys.argv[0]), sys.argv[1:]
     environment = dict(os.environ)
 
-    # Commands to execute prior to running the target command on the remote
-    # system
-    commandprefix = ''
+    # Configuration defaults
+    translate_all_arguments = False
+    preserve_isatty = False
 
     # Figure out where the current working directory is on the remote system.
     cwdtranslation = translatepath(os.getcwd(), mountmap)
     if cwdtranslation:
         sshremote, remotecwd, execremoteroot = cwdtranslation
-        commandprefix = 'cd %s &&' % (pipes.quote(remotecwd))
     else:
-        sshremote = ''
+        sshremote = None
 
-    translate_all_arguments = False
-    preserve_isatty = False
-    transargs = list()
-
-    # These variables are accessible inside the configuration script's context.
-    configvars = ('command', 'originalargs', 'environment', 'commandprefix',
-        'cwdtranslation', 'translate_all_arguments', 'sshremote', 'transargs',
-        'pre_process_config', 'preserve_isatty')
-
-    # First execution of configuration code prior to processing arguments. The
-    # configu script is run in its namespace of sorts. Yes, I know this is a
-    # terrible hack, and I should be ashamed of myself. I _may_ say "screw the
-    # isolation" and change it to just `exec configcode` at some point.
+    # First execution of configuration code prior to processing arguments.
     pre_process_config = True
-    configscope = dict([(k, locals()[k]) for k in configvars])
-    exec(configcode, configscope)
-    for key, value in configscope.iteritems():
-        _ = value
-        exec(key + " = _")
+    exec(configcode)
 
+    transargs = list()
     for argument in originalargs:
         # Attempt to translate any of the arguments that appear to be paths for
         # SSHFS-mounted locations remote system. Anything that begins with '/'
@@ -189,11 +170,7 @@ def main(configcode=''):
 
     # Second execution of configuration code after processing arguments.
     pre_process_config = False
-    configscope = dict([(k, locals()[k]) for k in configvars])
-    exec(configcode, configscope)
-    for key, value in configscope.iteritems():
-        _ = value
-        exec(key + " = _")
+    exec(configcode)
 
     if sshremote:
         # If the command should be executed on a remote server, generate the
