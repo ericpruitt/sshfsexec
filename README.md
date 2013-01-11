@@ -97,64 +97,28 @@ once after. On the first pass, `pre_process_config` is `True` and `False` on
 the second pass. During the first execution, `transargs` will not be populated,
 and `sshremote` will not yet be set if sshfsexec was run outside of an SSHFS
 mount. A sample configuration script can be found in this directory with the in
-the file named "config-sample.py". When the script is executed, the following
-variables are accessible and manipulatable inside the execution context:
+the file named "config-sample.py". When the script is executed, it is executed
+inside of sshfsexec's `main` function with unrestricted access to the code, but
+a list of the most relevant variables follows below.
 
-### pre_process_config ###
+### Options ###
 
-Variable indicating whether or not the configuration file is being executed
-before or after the command arguments have been translated to remote paths.
+**pre_process_config**: Variable indicating whether or not the configuration
+file is being executed before or after the command arguments have been
+translated to remote paths.
 
-### command ###
+**command**: Basename of the command being executed / the basename of argv0
+when the sshfsexec is launched.
 
-Basename of the command being executed / the basename of argv0 when the
-sshfsexec is launched.
-
-### originalargs ###
-
-Iterable containing the untranslated arguments passed to the command.
-
-### transargs ###
-
-Arguments that will be used to execute the command on the remote system. If any
-of the original arguments were paths on the remote system, the path in
-`transargs` will be the path as it exists on the remote server instead of how
-it was referenced within the SSHFS mount.
-
-### environment ###
-
-A dictionary containing the environment variables that will be passed to the
-subprocess. Note that for commands run via SSH, the environment variables are
-set locally before SSH is launched. This means that environment variables are
-subject to the configuration settings on the remote host, specifically
-`PermitUserEnvironment`.
-
-### commandprefix ###
-
-These commands will be executed in remote shell prior to launching the desired
-command. By default, it is used to `cd` into the remote directory that
-corresponds to the local directory when an command is launched inside a folder
-within an SSHFS mount.
-
-### cwdtranslation ###
-
-When a command is launched inside a directory within an SSHFS mount,
-`cwdtranslation` is a tuple that contains the remote login ("user@hostname" or
-"hostname"), the remote directory that corresponds to the current working
-directory, and the remote directory that the SSHFS mount point corresponds to.
-If a command is launched outside of an SSHFS folder, this variable will be
-`None`.
-
-### translate_all_arguments ###
-
-Outside of a folder in an SSHFS mount, sshfsexec will only check to see if an
-argument is a path mounted in an SSHFS volume if the argument begins with '/',
-'../', or './' or contains '/../'. This is to prevent commands from being
-executed on remote systems when one of the command's arguments also happens to
-share the name of a SSHFS folder. To demonstrate a use-case, let's pretend we
-have a server hosting Project X with the hostname "projectx.company.tld." On my
-personal computer, I am working on Project Y which happens to have have a
-dependency on Project X, so I setup the following SSHFS mount:
+**translate_all_arguments**: Outside of a folder in an SSHFS mount, sshfsexec
+will only check to see if an argument is a path mounted in an SSHFS volume if
+the argument begins with '/', '../', or './' or contains '/../'. This is to
+prevent commands from being executed on remote systems when one of the
+command's arguments also happens to share the name of a SSHFS folder. To
+demonstrate a use-case, let's pretend we have a server hosting Project X with
+the hostname "projectx.company.tld." On my personal computer, I am working on
+Project Y which happens to have have a dependency on Project X, so I setup the
+following SSHFS mount:
 
     $ sshfs projectx.company.tld ~/programming/projecty/projectx
 
@@ -164,23 +128,43 @@ being executed on projectx.company.tld via SSH. Without it set, `make projectx`
 would be executed locally. The default value for `translate_all_arguments` is
 `False`.
 
-### sshremote ###
-
-Remote SSH system where a command will be executed. This will be in the form of
-`user@hostname` or simply `hostname` depending on the arguments used for
-`sshfs` and the defined SSH options.
-
-### preserve_isatty ###
-
-Normally, a TTY will only be allocated on the remote server if, locally, stdin
-and stdout are TTY's. This causes problems with things like `grep --color` and
-`ls --color=auto`, both of which examine stdout to determine whether or not
-colors should be rendered. Setting `preserve_isatty` will result in some
-kludgey stuff being done to make sure the isatty results for stdin, stdout and
-stderr on the remote process are the same as for the local process.
+**preserve_isatty**: Normally, a TTY will only be allocated on the remote
+server if, locally, stdin and stdout are TTY's. This causes problems with
+things like `grep --color` and `ls --color=auto`, both of which examine stdout
+to determine whether or not colors should be rendered. Setting
+`preserve_isatty` will result in some kludgey stuff being done to make sure the
+isatty results for stdin, stdout and stderr on the remote process are the same
+as for the local process.
 
 In its current implemenation, this option is buggy: anything launched on the
 remote server that reads from stdin will hang indefinitely waiting.
+
+### Command Execution Variables ###
+
+**environment**: A dictionary containing the environment variables that will be
+passed to the subprocess. Note that for commands run via SSH, the environment
+variables are set locally before SSH is launched. This means that environment
+variables are subject to the configuration settings on the remote host,
+specifically `PermitUserEnvironment`.
+
+**originalargs**: Iterable containing the untranslated arguments passed to the
+command.
+
+**sshremote**: Remote SSH system where a command will be executed. This will be
+in the form of `user@hostname` or simply `hostname` depending on the arguments
+used for `sshfs` and the defined SSH options.
+
+**cwdtranslation**: When a command is launched inside a directory within an
+SSHFS mount, `cwdtranslation` is a tuple that contains the remote login
+("user@hostname" or "hostname"), the remote directory that corresponds to the
+current working directory, and the remote directory that the SSHFS mount point
+corresponds to. If a command is launched outside of an SSHFS folder, this
+variable will be `None`.
+
+**transargs**: Arguments that will be used to execute the command on the remote
+system. If any of the original arguments were paths on the remote system, the
+path in `transargs` will be the path as it exists on the remote server instead
+of how it was referenced within the SSHFS mount.
 
 To Do
 -----
