@@ -81,28 +81,28 @@ def translatepath(localpath, devicemap):
     Determine the remote SSH host and remote path of a file located within
     an sshfs mount point. The mountmap is a dictionary in the format
     returned by sshfsmountmap. A tuple containing the remote login
-    ([user@]hostname), remote path, and remote path of the mount point is
-    returned `localpath` is within an SSHFS mount point, even if the file
-    does not exist, and `None` otherwise.
+    ([user@]hostname), remote path, and local mount point for the SSHFS
+    volume is returned if `localpath` is within an SSHFS mount point and
+    `None` otherwise. The `localpath` does not need to exist in order for a
+    translated path to be returned.
     """
     testdir = os.path.abspath(localpath)
     while True:
         mountpoint = testdir
-        mountinfo = devicemap.get(mountpoint, None)
+        mountinfo = devicemap.get(mountpoint)
 
         if mountinfo:
-            host, remoteroot = mountinfo
+            remotelogin, remoteroot = mountinfo
             break
         elif not testdir or testdir == '/':
             return None
 
         testdir, _ = os.path.split(testdir)
 
-    localpath = os.path.join(os.getcwd(), localpath)
-    relpath = os.path.relpath(localpath, mountpoint)
+    relpath = os.path.relpath(os.path.abspath(localpath), mountpoint)
     remotepath = os.path.join(remoteroot, relpath)
 
-    return host, remotepath, remoteroot
+    return remotelogin, remotepath, mountpoint
 
 
 def main(configcode=''):
@@ -114,70 +114,74 @@ def main(configcode=''):
     # Configuration defaults
     translate_all_arguments = False
     preserve_isatty = False
+    coerce_remote_execution = False
 
     # Figure out where the current working directory is on the remote system.
     cwdtranslation = translatepath(os.getcwd(), mountmap)
     if cwdtranslation:
-        sshremote, remotecwd, execremoteroot = cwdtranslation
+        sshlogin, remotecwd, basemountpoint = cwdtranslation
+        sshhost = sshlogin.split('@')[0] if '@' in sshlogin else sshlogin
     else:
-        sshremote = None
+        sshlogin = None
 
     # First execution of configuration code prior to processing arguments.
     pre_process_config = True
     exec(configcode)
 
-    transargs = list()
+    remoteargs = list()
     for argument in originalargs:
-        # Attempt to translate any of the arguments that appear to be paths for
-        # SSHFS-mounted locations remote system. Anything that begins with '/'
-        # or '../' or contains '/../' will be translated. When the current
-        # working directory is not inside an SSHFS mount point, anything that
-        # begins with './' will also be translated.
-        if (translate_all_arguments or
-         (any(map(argument.startswith, ('/', '../'))) or '/../' in argument)
-          or (not cwdtranslation and argument.startswith('./'))):
-            try:
-                translation = translatepath(argument, mountmap)
-                if translation:
-                    mounthost, remotepath, remoteroot = translation
-                    if not sshremote:
-                        sshremote = mounthost
+        translation = translatepath(argument, mountmap)
 
-                    # Verify arguments don't cross SSHFS hosts
-                    if not argument.startswith('/'):
-                        if sshremote and mounthost != sshremote:
-                            if '@' in sshremote:
-                                user, host = sshremote.split('@')
-                            else:
-                                user = None
-                                host = sshremote
+        if not translation:
+            remoteargs.append(argument)
+            continue
 
-                            if not sshost.endswith('@' + host) and sshhost != host:
-                                print("SSHFS host mismatch.", file=sys.stderr)
-                                exit(EXIT_SSHFS_HOST_MISMATCH)
+        login, transpath, argmountpoint = translation
+        arghost = login.split('@')[0] if '@' in login else login
 
-                        if cwdtranslation:
-                            remotepath = os.path.relpath(remotepath, remotecwd)
+        # Paths used with coerced execution must be absolute
+        if coerce_remote_execution and not cwdtranslation:
+            argument = transpath
 
-                    transargs.append(remotepath)
+        if not sshlogin and coerce_remote_execution:
+            sshlogin = login
+            basemountpoint = argmountpoint
+            sshhost = sshlogin.split('@')[0] if '@' in sshlogin else sshlogin
+        elif sshlogin and arghost != sshhost:
+            print("SSHFS host mismatch.", file=sys.stderr)
+            exit(EXIT_SSHFS_HOST_MISMATCH)
+
+        # If the argument is an absolute path or a relative path that crosses
+        # over to a different SSHFS mount point, use an absolute path for the
+        # remote command.
+        if sshlogin and basemountpoint != argmountpoint or argument[0] == '/':
+            remoteargs.append(transpath)
+
+        else:
+            if cwdtranslation:
+                # Ensure the mount point is not referenced by its local name, e.g.
+                # ../../mountpoint/subfolder. If is is, switch to an absolute path.
+                argupdirs = os.path.normpath(argument).split('/').count('..')
+                highestreference = os.path.abspath(('../' * (argupdirs - 1)))
+                refmount = mountmap.get(highestreference)
+                if refmount:
+                    remotebasename = os.path.basename(refmount[1])
+                    localmountname = os.path.basename(highestreference)
+
+                if argupdirs and refmount and remotebasename != localmountname:
+                    remoteargs.append(transpath)
                     continue
 
-            # If the error is anything other than ENOENT (file does not exist),
-            # raise it.
-            except EnvironmentError as e:
-                if e.errno != errno.ENOENT:
-                    raise
-
-        transargs.append(argument)
+            remoteargs.append(argument)
 
     # Second execution of configuration code after processing arguments.
     pre_process_config = False
     exec(configcode)
 
-    if sshremote:
+    if sshlogin:
         # If the command should be executed on a remote server, generate the
         # execution string to pass into the shell.
-        executed = listtoshc([command] + transargs)
+        executed = listtoshc([command] + remoteargs)
 
         if cwdtranslation:
             # If the current working directory is inside an SSHFS mount, cd
@@ -216,7 +220,7 @@ def main(configcode=''):
         else:
             ttyoption = '-T'
 
-        argv = [SSH_BINARY, '-e', 'none', sshremote, ttyoption, sshcommand]
+        argv = [SSH_BINARY, '-e', 'none', sshlogin, ttyoption, sshcommand]
 
     else:
         # If the command does not interact with any SSHFS-mounted paths, run
