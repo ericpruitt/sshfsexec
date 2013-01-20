@@ -65,6 +65,41 @@ executed inside the SSHFS volume and the home directory:
     ~$ git --version
     git version 1.7.2.5
 
+Improving Performance
+----------------------
+
+With the default SSH client configuration, each time a command is executed, a
+new SSH connection to the remote server must be created. Using the
+configuration options `ControlMaster` and `ControlPath` to setup shared SSH
+connections will reduce the latency of command invocation on remote servers.
+Here is a comparison of command execution time with and without SSH connection
+sharing:
+
+    # SSH connection sharing not enabled
+    codevat$ time grep &> /dev/null
+    real    0m0.927s
+
+    # Unmounting remote server and enabling SSH connection sharing
+    codevat$ cd
+    ~$ fusermount -u codevat/
+    ~$ vi ~/.ssh/config
+    ~$ sshfs codevat.com:/ codevat/
+
+    # SSH connection sharing enabled
+    ~$ cd codevat/
+    codevat$ time grep &> /dev/null
+    real    0m0.135s
+
+To enable SSH connection sharing, edit your local SSH configuration at
+`~/.ssh/config`, and add the following lines:
+
+    ControlMaster auto
+    ControlPath /tmp/ssh_mux_%h_%p_%r
+
+Next, unmount and remount the SSHFS volume to begin using connection sharing.
+For more information on SSH connection sharing, please refer to the
+documentation in `man 5 ssh_config`.
+
 Advanced Configuration
 ----------------------
 
