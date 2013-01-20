@@ -4,41 +4,41 @@ sshfsexec
 Description
 -----------
 
-I use SSHFS on a daily basis so I can program on a remote development server
-using local applications. While the access times are generally acceptable on a
-modern broadband connection for basic editing with Vim, attempting to run
-something like git or grepping multiple files tends to be insufferably slow. To
-resolve this, I wrote sshfsexec which transparently executes commands on remote
-systems that host locally mounted SSHFS volumes.
+I use SSHFS on a frequently so I can work on remote servers using local
+applications. The access times are generally acceptable on a modern broadband
+connection for basic text editing with Vim, but I/O heavy commands like git or
+grep with multiple files are insufferably slow. To resolve this, I wrote
+sshfsexec which transparently executes commands on remote systems that host
+locally mounted SSHFS volumes.
 
 Basic Configuration and Usage
 -----------------------------
 
-Copy sshfsexec to a folder defined in your `PATH` environment variable and make
+Copy sshfsexec to a folder defined in the `PATH` environment variable, and make
 sure the file is executable. The folder that sshfsexec is copied to should not
-contain any of the executables that you wish to run on remote systems for
-reasons that should become clear later, so it may be best to create a new
-folder specifically for sshfsexec and adjust your `PATH` environment variable
-accordingly.
+contain any executable that shared the base-name of commands to be run on
+remote systems for reasons that should become clear later, so it is best to
+create a new folder specifically for sshfsexec and adjust the `PATH`
+environment variable accordingly.
 
     $ mkdir ~/bin/sshfsexec
     $ cp sshfsexec.py ~/bin/sshfsexec
     $ chmod +x ~/bin/sshfsexec/sshfsexec.py
     $ export PATH="$HOME/bin/sshfsexec:$PATH"
 
-If you adjust your `PATH` environment variable, make sure to update your login
+When adjusting the `PATH` environment variable, make sure to update the login
 profile (generally `~/.profile`) to make sure `PATH` is setup automatically
-when you log in. Once sshfsexec has been copied into a folder in `PATH`, create
-symlinks from sshfsexec for the commands you wish to execute transparently on
-the remote systems. In the example below, `git` will be executed on remote
+upon login. Once sshfsexec has been copied into a folder in `PATH`, create
+symlinks from sshfsexec for the commands that should be executed transparently
+on the remote systems. In the example below, `git` will be executed on remote
 systems when interacting with SSHFS volumes.
 
     $ cd ~/bin/sshfsexec
     $ ln -s sshfsexec.py git
-    $ hash -r                          # Clears the executable cache in Bash.
+    $ hash -r                     # Clears the executable path cache in Bash.
 
-Any time `git` is inside of the SSHFS volume, it will not be executed on the
-remote system transparently:
+Any time `git` is launched inside of the SSHFS volume, it will be executed on
+the remote system transparently:
 
     ~$ sshfs codevat.com:/home/git/repositories git.codevat.com/
     ~$ cd git.codevat.com/mydwm.git
@@ -56,7 +56,7 @@ remote system transparently:
     mydwm.git$
 
 That is not a particularly convincing example. Let us compare `git --version`
-executed inside the SSHFS volume and the home directory:
+executed inside the SSHFS volume and the local home directory:
 
     mydwm.git$ git --version
     git version 1.7.1
@@ -65,15 +65,21 @@ executed inside the SSHFS volume and the home directory:
     ~$ git --version
     git version 1.7.2.5
 
-Improving Performance
+Whenever a command should be executed locally instead of remotely, sshfsexec
+will traverse the folders in `PATH` looking for an executable with the same
+name that was used to invoke sshfsexec. Once an executable is found, it is
+launched with the arguments originally passed to sshfsexec.
+
+Tips, Tricks and Ideas
 ----------------------
 
-With the default SSH client configuration, each time a command is executed, a
-new SSH connection to the remote server must be created. Using the
-configuration options `ControlMaster` and `ControlPath` to setup shared SSH
-connections will reduce the latency of command invocation on remote servers.
-Here is a comparison of command execution time with and without SSH connection
-sharing:
+### Improving Performance ###
+
+With the default SSH client configuration, a new SSH connection to the remote
+server must be created each time a command is executed. Using the configuration
+options `ControlMaster` and `ControlPath` to setup shared SSH connections will
+reduce the latency of command invocation on remote servers. Here is a
+comparison of command execution time with and without SSH connection sharing:
 
     # SSH connection sharing not enabled
     codevat$ time grep &> /dev/null
@@ -90,15 +96,41 @@ sharing:
     codevat$ time grep &> /dev/null
     real    0m0.135s
 
-To enable SSH connection sharing, edit your local SSH configuration at
-`~/.ssh/config`, and add the following lines:
+To enable SSH connection sharing, add the following lines to the local SSH
+configuration at `~/.ssh/config`:
 
     ControlMaster auto
     ControlPath /tmp/ssh_mux_%h_%p_%r
 
 Next, unmount and remount the SSHFS volume to begin using connection sharing.
-For more information on SSH connection sharing, please refer to the
-documentation in `man 5 ssh_config`.
+Check out the documentation in ssh_config(5) for more information on SSH
+connection sharing.
+
+### SSH Connection Messages ###
+
+SSH will display a message like "Connection to $HOSTNAME closed." or "Shared
+connection to $HOSTNAME closed." whenever an SSH session with a pseudo-terminal
+finishes. Although this message can be disabled with `Loglevel=quiet`, this
+also disables at least one critical security message noted by a commenter in
+[OpenSSH bug #1273](https://bugzilla.mindrot.org/show_bug.cgi?id=1273#c6). I
+found these messages annoying, but I was unwilling to accept the possibility of
+suppressing important notices. I got rid of the closed connection messages by
+patching my OpenSSH client binary. I changed the first character of the format
+strings responsible for the messages to null bytes. I originally used `xxd` and
+`vim`, but the binary can also be patched using Perl:
+
+    $ strings /usr/bin/ssh | egrep -i '(Shared )?connection to \S+ closed\.'
+    Connection to %.64s closed.
+    Shared connection to %s closed.
+    $ cp /usr/bin/ssh ~/bin
+    $ perl -pi -e 's/((Shared )?connection to \S+ closed)\./\0\1/ig' ~/bin/ssh
+
+### Usage Ideas ###
+
+To provide provide some ideas for uses of sshfsexec, here are some of the most
+frequently used programs I have symlinked to sshfsexec:
+
+    crontab  egrep  fgrep  find  git  grep  last  mysql  php  service  w  wget
 
 Advanced Configuration
 ----------------------
@@ -109,10 +141,12 @@ will be executed twice, once before the command arguments are translated and
 once after. On the first pass, `pre_process_config` is `True` and `False` on
 the second pass. During the first execution, `remoteargs` will be unpopulated,
 and `sshlogin` will not yet be set if sshfsexec was run outside of an SSHFS
-mount. A sample configuration script can be found in this directory with the in
-the file named "config-sample.py". When the script is executed, it is executed
-inside of sshfsexec's `main` function with unrestricted access to the code, but
-a list of the most relevant variables follows below.
+volume. A sample configuration script named "config-sample.py" is included with
+the source code to sshfsexec.
+
+When the configuration script is executed, it is executed inside of sshfsexec's
+`main` function with unrestricted access to the code, but a list of the most
+relevant variables follows below.
 
 ### Options ###
 
@@ -120,7 +154,7 @@ a list of the most relevant variables follows below.
 file is being executed before or after the command arguments have been
 translated to remote paths.
 
-**command**: Basename of the command being executed / the basename of argv0
+**command**: Base-name of the command being executed / the basename of argv0
 when the sshfsexec is launched.
 
 **coerce_remote_execution**: Determines whether or not referencing a path
@@ -136,16 +170,17 @@ executed remotely with `coerce_remote_execution` set:
 This option is disabled by default and must be set before the command arguments
 are parsed / while `pre_process_config` is `True`.
 
-**preserve_isatty**: Normally, a TTY will only be allocated on the remote
-server if, locally, stdin and stdout are TTY's. This causes problems with
-things like `grep --color` and `ls --color=auto`, both of which examine stdout
-to determine whether or not colors should be rendered. Setting
-`preserve_isatty` will result in some kludgey stuff being done to make sure the
-isatty results for stdin, stdout and stderr on the remote process are the same
-as for the local process.
+**preserve_isatty**: A PTY will normally only be allocated on the remote server
+if the local stdin and stdout are pseudo-terminals. This causes problems with
+things like `grep --color` and `ls --color=auto`, both of which check the value
+of isatty on stdout to determine whether or not colors should be rendered.
+Setting `preserve_isatty` will result in some kludgey stuff being done to make
+sure the isatty results for stdin, stdout and stderr on the remote process are
+the same as for the local sshfsexec process.
 
 In its current implemenation, this option is buggy: anything launched on the
-remote server that reads from stdin will hang indefinitely waiting.
+remote server that reads from stdin will hang indefinitely even when no more
+data is available and the local pipe has been closed.
 
 ### Command Execution Variables ###
 
