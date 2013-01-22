@@ -4,7 +4,7 @@ sshfsexec
 Description
 -----------
 
-I use SSHFS on a frequently so I can work on remote servers using local
+I use SSHFS frequently so I can work on remote servers using local
 applications. The access times are generally acceptable on a modern broadband
 connection for basic text editing with Vim, but I/O heavy commands like git or
 grep with multiple files are insufferably slow. To resolve this, I wrote
@@ -16,7 +16,7 @@ Basic Configuration and Usage
 
 Copy sshfsexec to a folder defined in the `PATH` environment variable, and make
 sure the file is executable. The folder that sshfsexec is copied to should not
-contain any executable that shared the base-name of commands to be run on
+contain any executable that shares the base-name of commands to be run on
 remote systems for reasons that should become clear later, so it is best to
 create a new folder specifically for sshfsexec and adjust the `PATH`
 environment variable accordingly.
@@ -26,12 +26,12 @@ environment variable accordingly.
     $ chmod +x ~/bin/sshfsexec/sshfsexec.py
     $ export PATH="$HOME/bin/sshfsexec:$PATH"
 
-When adjusting the `PATH` environment variable, make sure to update the login
-profile (generally `~/.profile`) to make sure `PATH` is setup automatically
-upon login. Once sshfsexec has been copied into a folder in `PATH`, create
-symlinks from sshfsexec for the commands that should be executed transparently
-on the remote systems. In the example below, `git` will be executed on remote
-systems when interacting with SSHFS volumes.
+When adjusting the `PATH` environment variable, the login profile should also
+be edited (generally `~/.profile`) so `PATH` is setup automatically upon login.
+Once sshfsexec has been copied into a folder in `PATH`, create symlinks from
+sshfsexec for the commands that should be executed transparently on the remote
+systems. In the example below, `git` will be executed on remote systems when
+interacting with SSHFS volumes.
 
     $ cd ~/bin/sshfsexec
     $ ln -s sshfsexec.py git
@@ -110,15 +110,18 @@ connection sharing.
 
 SSH will display a message like "Connection to $HOSTNAME closed." or "Shared
 connection to $HOSTNAME closed." whenever an SSH session with a pseudo-terminal
-finishes. Although this message can be disabled with `Loglevel=quiet`, this
-also disables at least one critical security message noted by a commenter in
-[OpenSSH bug #1273](https://bugzilla.mindrot.org/show_bug.cgi?id=1273#c6). I
+terminates. Although this message can be disabled with `Loglevel=quiet`, doing
+so also disables at least one critical security message as noted by a commenter
+in [OpenSSH bug #1273](https://bugzilla.mindrot.org/show_bug.cgi?id=1273#c6). I
 found these messages annoying, but I was unwilling to accept the possibility of
-suppressing important notices. I got rid of the closed connection messages by
-patching my OpenSSH client binary. I changed the first character of the format
-strings responsible for the messages to null bytes. I originally used `xxd` and
-`vim`, but the binary can also be patched using Perl:
+suppressing important notices. I patched my OpenSSH client binary, changing the
+first character of each format string to a null byte, to get rid of the
+messages. I used `xxd` and `vim` the first time I patched the binary, but
+provided the format strings in the targeted version of OpenSSH do not differ
+from mine, the following perl substitution should work just as well:
 
+    $ ssh -V
+    OpenSSH_5.5p1 Debian-6+squeeze2, OpenSSL 0.9.8o 01 Jun 2010
     $ strings /usr/bin/ssh | egrep -i '(Shared )?connection to \S+ closed\.'
     Connection to %.64s closed.
     Shared connection to %s closed.
@@ -127,8 +130,8 @@ strings responsible for the messages to null bytes. I originally used `xxd` and
 
 ### Usage Ideas ###
 
-To provide provide some ideas for uses of sshfsexec, here are some of the most
-frequently used programs I have symlinked to sshfsexec:
+Here are some of the most frequently used programs I have symlinked to
+sshfsexec:
 
     crontab  egrep  fgrep  find  git  grep  last  mysql  php  service  w  wget
 
@@ -154,8 +157,8 @@ relevant variables follows below.
 file is being executed before or after the command arguments have been
 translated to remote paths.
 
-**command**: Base-name of the command being executed / the basename of argv0
-when the sshfsexec is launched.
+**command**: Base-name of the command being executed
+(`os.path.basename(sys.argv[0])`) when the sshfsexec is launched.
 
 **coerce_remote_execution**: Determines whether or not referencing a path
 within an SSHFS volume will coerce a command to be executed remotely instead of
@@ -193,7 +196,7 @@ specifically `PermitUserEnvironment`.
 **stdin_is_pipe**: Boolean indicating whether or not stdin is a pipe.
 
 **originalargs**: Iterable containing the untranslated arguments passed to the
-command.
+command (`sys.argv[1:]`).
 
 **sshlogin**: Remote SSH system where a command will be executed. This will be
 in the form of `user@hostname` or simply `hostname` depending on the arguments
@@ -202,9 +205,8 @@ used for `sshfs` and the defined SSH options.
 **cwdtranslation**: When a command is launched inside a directory within an
 SSHFS mount, `cwdtranslation` is a tuple that contains the remote login
 ("user@hostname" or "hostname"), the remote directory that corresponds to the
-current working directory, and the remote directory that the SSHFS mount point
-corresponds to. If a command is launched outside of an SSHFS folder, this
-variable will be `None`.
+current working directory, and the SSHFS local mount point for SSHFS volume. If
+a command is launched outside of an SSHFS folder, this variable will be `None`.
 
 **remoteargs**: Arguments that will be used to execute the command on the
 remote system. If any of the original arguments were paths on the remote
