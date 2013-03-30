@@ -220,7 +220,11 @@ def main(configcode=''):
         else:
             ttyoption = '-T'
 
-        argv = [SSH_BINARY, '-e', 'none', sshlogin, ttyoption, sshcommand]
+        argv = [SSH_BINARY]
+        if ttyoption == '-T':
+            argv += ['-e', 'none']
+
+        argv += [sshlogin, ttyoption, sshcommand]
 
     else:
         # If the command does not interact with any SSHFS-mounted paths, run
@@ -242,13 +246,8 @@ def main(configcode=''):
 
         argv = [replacedbinary] + originalargs
 
-    # Launch subprocess, and ignore Ctrl+C.
     child = subprocess.Popen(argv, env=environment)
-    while True:
-        try:
-            exit(child.wait())
-        except KeyboardInterrupt:
-            pass
+    exit(child.wait())
 
 
 if __name__ == "__main__":
