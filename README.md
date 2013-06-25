@@ -193,6 +193,17 @@ variables are set locally before SSH is launched. This means that environment
 variables are subject to the configuration settings on the remote host,
 specifically `PermitUserEnvironment`.
 
+**envpassthrough**: This dictionary is used to configure environment variables
+on the remote server. Normally, only environment variables permitted by the
+remote server's sshd configuration will be made available to the remote
+process, but with `envpassthrough`, the environment variables will be declared
+on the remote server before executing the commands. For example, if
+`envpassthrough = { "EDITOR": "vim" }`, the remote invocation of `git commit`
+will be as follows: `EDITOR=vim git commit`. Please note that the definition of
+these environment variables is likely to be visible to all users on both the
+remote server and local host, so `envpassthrough` should not be used for
+sensitive information.
+
 **stdin_is_pipe**: Boolean indicating whether or not stdin is a pipe.
 
 **originalargs**: Iterable containing the untranslated arguments passed to the

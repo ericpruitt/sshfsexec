@@ -49,3 +49,20 @@ else:
     centos5 = ('example.com', 'server.tld', 'router.lan')
     if environment.get('TERM') == 'screen-256color' and server in centos5:
         environment['TERM'] = 'screen'
+
+    # Depending on which directory or repo I'm in, the git config may not have
+    # my information on work servers.
+    workservers = ('work.company.tld', 'boxen.company.tld')
+    if command == 'git' and server in workservers:
+        envpassthrough = {
+            'GIT_AUTHOR_EMAIL': 'eric.pruitt@myjob.tld',
+            'GIT_AUTHOR_NAME': 'Eric Pruitt',
+            'GIT_COMMITTER_EMAIL': 'eric.pruitt@myjob.tld',
+            'GIT_COMMITTER_NAME': 'Eric Pruitt',
+        }
+
+    # If I specify something like GIT_AUTHOR_NAME locally, I want it to take
+    # precedence over the default envpassthrough value above.
+    for key in envpassthrough:
+        if key in os.environ:
+            envpassthrough[key] = os.environ[key]

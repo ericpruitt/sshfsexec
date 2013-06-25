@@ -108,6 +108,7 @@ def translatepath(localpath, devicemap):
 def main(configcode=''):
     mountmap = sshfsmountmap()
     command, originalargs = os.path.basename(sys.argv[0]), sys.argv[1:]
+    envpassthrough = dict()
     environment = dict(os.environ)
     stdin_is_pipe = stat.S_ISFIFO(os.fstat(0).st_mode)
 
@@ -159,8 +160,9 @@ def main(configcode=''):
 
         else:
             if cwdtranslation:
-                # Ensure the mount point is not referenced by its local name, e.g.
-                # ../../mountpoint/subfolder. If is is, switch to an absolute path.
+                # Ensure the mount point is not referenced by its local name,
+                # e.g. ../../mountpoint/subfolder. If is is, switch to an
+                # absolute path.
                 argupdirs = os.path.normpath(argument).split('/').count('..')
                 highestreference = os.path.abspath(('../' * (argupdirs - 1)))
                 refmount = mountmap.get(highestreference)
@@ -183,6 +185,10 @@ def main(configcode=''):
         # execution string to pass into the shell.
         executed = listtoshc([command] + remoteargs)
 
+        # Prepend environment variable declarations
+        for variable, value in envpassthrough.iteritems():
+            executed = '%s=%s %s' % (variable, pipes.quote(value), executed)
+
         if cwdtranslation:
             # If the current working directory is inside an SSHFS mount, cd
             # into the corresponding remote directory first. Why the brackets?
@@ -194,7 +200,8 @@ def main(configcode=''):
             #   ~% echo example | { cd / && pwd; }
             #   /
             #
-            sshcommand = '{ cd %s && %s; }' % (remotecwd, executed)
+            quotedremotecwd = pipes.quote(remotecwd)
+            sshcommand = '{ cd %s && %s; }' % (quotedremotecwd, executed)
         else:
             sshcommand = executed
 
