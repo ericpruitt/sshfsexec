@@ -4,6 +4,7 @@ from __future__ import print_function
 import errno
 import os
 import pipes
+import re
 import subprocess
 import sys
 import stat
@@ -58,17 +59,24 @@ def sshfsmountmap():
     remote login ([user@]hostname) and remote path for all remote hosts
     mounted with sshfs.
     """
+    def unescape(path):
+        "Unescape octal-escaped path."
+        def suboctal(match):
+            "Convert octal sequence regex match to a character."
+            return chr(int(match.group(0)[1:], 8))
+        return re.sub("\\\\[0-7]{1,3}", suboctal, path)
+
     mapping = dict()
     with open("/proc/self/mountinfo") as iostream:
         for line in iostream:
             fields = line.split(' ', 11)
             fstype = fields[7]
-            mountpoint = os.path.abspath(fields[4])
+            mountpoint = unescape(os.path.abspath(fields[4]))
 
             if fstype == 'fuse.sshfs':
                 remote, path = fields[8].split(':', 1)
                 device = os.makedev(*(map(int, fields[2].split(':'))))
-                mapping[mountpoint] = (remote, os.path.abspath(path))
+                mapping[mountpoint] = (remote, os.path.abspath(unescape(path)))
 
             else:
                 mapping[mountpoint] = None
