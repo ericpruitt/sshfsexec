@@ -5,7 +5,6 @@ import errno
 import os
 import pipes
 import re
-import subprocess
 import sys
 import stat
 
@@ -261,8 +260,7 @@ def main(configcode=''):
 
         argv = [replacedbinary] + originalargs
 
-    child = subprocess.Popen(argv, env=environment)
-    exit(child.wait())
+    os.execvpe(argv[0], argv, environment)
 
 
 if __name__ == "__main__":
