@@ -68,12 +68,12 @@ def sshfsmountmap():
     mapping = dict()
     with open("/proc/self/mountinfo") as iostream:
         for line in iostream:
-            fields = line.split(' ', 11)
-            fstype = fields[7]
+            fields = line.split(' ')
+            fstype = fields[-3]
             mountpoint = unescape(os.path.abspath(fields[4]))
 
             if fstype == 'fuse.sshfs':
-                remote, path = fields[8].split(':', 1)
+                remote, path = fields[-2].split(':', 1)
                 device = os.makedev(*(map(int, fields[2].split(':'))))
                 mapping[mountpoint] = (remote, os.path.abspath(unescape(path)))
 
