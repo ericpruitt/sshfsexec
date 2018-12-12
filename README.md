@@ -11,6 +11,12 @@ grep with multiple files are insufferably slow. To resolve this, I wrote
 sshfsexec which transparently executes commands on remote systems that host
 locally mounted SSHFS volumes.
 
+Despite the name, [this tool also supports NFS v3 and v4 mounts][nfs-pr], but
+this was only added in December 2018 — several years after the tool was
+originally created.
+
+  [nfs-pr]: https://github.com/ericpruitt/sshfsexec/pull/4
+
 Basic Configuration and Usage
 -----------------------------
 
