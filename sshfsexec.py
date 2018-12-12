@@ -72,7 +72,7 @@ def sshfsmountmap():
             fstype = fields[-3]
             mountpoint = unescape(os.path.abspath(fields[4]))
 
-            if fstype == 'fuse.sshfs':
+            if fstype in ('fuse.sshfs', 'nfs4', 'nfs'):
                 remote, path = fields[-2].split(':', 1)
                 device = os.makedev(*(map(int, fields[2].split(':'))))
                 mapping[mountpoint] = (remote, os.path.abspath(unescape(path)))
